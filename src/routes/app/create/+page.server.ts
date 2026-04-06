@@ -1,3 +1,4 @@
+import { mergeConversationDrafts, appendConversationIteration } from '$lib/server/conversation-drafts';
 import { backendFetch, backendJson, readBackendError } from '$lib/server/backend';
 import { normalizeConversation } from '$lib/normalizers';
 import type { Conversacion, Mensaje, Pantalla } from '$lib/types';
@@ -19,7 +20,17 @@ function latestImage(messages: Mensaje[]): Mensaje | null {
   return [...messages].reverse().find((message) => message.role === 'assistant' && isStaticAsset(message.content)) ?? null;
 }
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+function extractAssetFilename(assetPath: string): string | null {
+  if (!isStaticAsset(assetPath)) {
+    return null;
+  }
+
+  const normalizedPath = assetPath.split('?')[0] ?? assetPath;
+  const filename = normalizedPath.replace(/^\/static\//, '').trim();
+  return filename || null;
+}
+
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   const [screens, rawConversations] = await Promise.all([
     backendJson<Pantalla[]>('/generators/mis-pantallas', { token: locals.token }),
     backendJson<unknown[]>(`/conversations/generator/${locals.user!.id}`, {
@@ -27,9 +38,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }).catch(() => [])
   ]);
 
-  const conversations = rawConversations
-    .map(normalizeConversation)
-    .filter((conversation): conversation is Conversacion => Boolean(conversation));
+  const conversations = mergeConversationDrafts(
+    rawConversations
+      .map(normalizeConversation)
+      .filter((conversation): conversation is Conversacion => Boolean(conversation)),
+    cookies
+  );
 
   const sortedConversations = [...conversations].sort((left, right) => right.id - left.id);
   const selectedConversationId = Number(url.searchParams.get('conversation') ?? sortedConversations[0]?.id ?? 0);
@@ -52,10 +66,11 @@ export const actions: Actions = {
     throw redirect(303, `/app/create?conversation=${conversation.id}`);
   },
 
-  send: async ({ request, locals }) => {
+  send: async ({ request, locals, cookies }) => {
     const formData = await request.formData();
     const prompt = String(formData.get('prompt') ?? '').trim();
     let conversationId = Number(formData.get('conversationId') ?? 0);
+    const baseImageUrl = String(formData.get('baseImageUrl') ?? '').trim();
 
     if (!prompt) {
       return fail(400, {
@@ -66,6 +81,43 @@ export const actions: Actions = {
     if (!conversationId) {
       const conversation = await createConversation(locals.token, locals.user!.id);
       conversationId = conversation.id;
+    }
+
+    if (baseImageUrl) {
+      const imageFilename = extractAssetFilename(baseImageUrl);
+
+      if (!imageFilename) {
+        return fail(400, {
+          sendError: 'No se pudo identificar la imagen base para iterar.'
+        });
+      }
+
+      const params = new URLSearchParams({
+        prompt,
+        image_filename: imageFilename
+      });
+
+      const response = await backendFetch(`/content/iterate?${params.toString()}`, {
+        method: 'POST',
+        token: locals.token
+      });
+
+      if (!response.ok) {
+        return fail(response.status, {
+          sendError: await readBackendError(response)
+        });
+      }
+
+      const payload = (await response.json()) as { image_url?: string; error?: string };
+
+      if (!payload.image_url) {
+        return fail(500, {
+          sendError: payload.error || 'No se pudo iterar la imagen actual.'
+        });
+      }
+
+      appendConversationIteration(cookies, conversationId, prompt, payload.image_url);
+      throw redirect(303, `/app/create?conversation=${conversationId}`);
     }
 
     const response = await backendFetch('/messages/', {

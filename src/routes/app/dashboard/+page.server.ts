@@ -1,5 +1,6 @@
 import { backendJson } from '$lib/server/backend';
 import { normalizeConversation } from '$lib/normalizers';
+import { mergeConversationDrafts } from '$lib/server/conversation-drafts';
 import type { Conversacion, Mensaje, Pantalla } from '$lib/types';
 import { isStaticAsset } from '$lib/utils';
 import type { PageServerLoad } from './$types';
@@ -65,7 +66,7 @@ function buildRecentImages(conversations: Conversacion[]): RecentImage[] {
   });
 }
 
-export const load: PageServerLoad = async ({ locals }) => {
+export const load: PageServerLoad = async ({ locals, cookies }) => {
   const token = locals.token;
   const user = locals.user;
 
@@ -74,9 +75,12 @@ export const load: PageServerLoad = async ({ locals }) => {
     backendJson<unknown[]>(`/conversations/generator/${user!.id}`, { token }).catch(() => [])
   ]);
 
-  const conversations = rawConversations
-    .map(normalizeConversation)
-    .filter((conversation): conversation is Conversacion => Boolean(conversation));
+  const conversations = mergeConversationDrafts(
+    rawConversations
+      .map(normalizeConversation)
+      .filter((conversation): conversation is Conversacion => Boolean(conversation)),
+    cookies
+  );
 
   const recentImages: RecentImage[] = buildRecentImages(conversations)
     .sort((left, right) => right.id - left.id)

@@ -9,6 +9,7 @@
 
   let activePanel: 'history' | 'screens' | null = null;
   let initializedPanel = false;
+  let expandedImage: { src: string; alt: string } | null = null;
 
   function firstPrompt(conversationId: number): string {
     const conversation = data.conversations.find((entry) => entry.id === conversationId);
@@ -32,6 +33,20 @@
     activePanel = null;
   }
 
+  function openImagePreview(src: string, alt: string) {
+    expandedImage = { src, alt };
+  }
+
+  function closeImagePreview() {
+    expandedImage = null;
+  }
+
+  function handleWindowKeydown(event: KeyboardEvent) {
+    if (event.key === 'Escape') {
+      closeImagePreview();
+    }
+  }
+
   $: if (!initializedPanel && (form?.assignError || data.justAssigned)) {
     activePanel = 'screens';
     initializedPanel = true;
@@ -42,6 +57,8 @@
     initializedPanel = true;
   }
 </script>
+
+<svelte:window on:keydown={handleWindowKeydown} />
 
 <svelte:head>
   <title>Laboratorio Creativo | Kiosk For Creators</title>
@@ -128,6 +145,38 @@
           aria-label="Cerrar panel"
           on:click={closePanels}
         ></button>
+      {/if}
+
+      {#if expandedImage}
+        <div class="absolute inset-0 z-30 px-5 py-8">
+          <button
+            type="button"
+            class="absolute inset-0 bg-slate-950/72 backdrop-blur-md"
+            aria-label="Cerrar vista ampliada"
+            on:click={closeImagePreview}
+          ></button>
+
+          <div class="mx-auto flex h-full max-w-5xl items-center justify-center">
+            <div class="relative w-full overflow-hidden rounded-[30px] border border-white/14 bg-[linear-gradient(180deg,rgba(15,23,42,0.96)_0%,rgba(15,23,42,0.9)_100%)] p-4 shadow-[0_32px_80px_rgba(15,23,42,0.38)]">
+              <button
+                type="button"
+                class="absolute right-4 top-4 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/14 bg-white/10 text-white transition hover:bg-white/16"
+                aria-label="Cerrar vista ampliada"
+                on:click={closeImagePreview}
+              >
+                <Icon name="close" className="text-[1rem]" />
+              </button>
+
+              <div class="overflow-hidden rounded-[24px] border border-white/10 bg-slate-950/60 p-3">
+                <img
+                  src={expandedImage.src}
+                  alt={expandedImage.alt}
+                  class="max-h-[82vh] w-full rounded-[20px] object-contain"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       {/if}
 
       <aside
@@ -368,13 +417,28 @@
                     }`}
                   >
                     {#if isStaticAsset(message.content)}
-                      <div class="overflow-hidden rounded-[22px] bg-slate-100">
-                        <img
-                          src={buildAssetUrl(data.apiBaseUrl, message.content)}
-                          alt={`Contenido generado ${message.id}`}
-                          class="max-h-[13rem] w-full object-cover"
-                        />
-                      </div>
+                      <button
+                        type="button"
+                        class="group block w-full text-left"
+                        on:click={() =>
+                          openImagePreview(
+                            buildAssetUrl(data.apiBaseUrl, message.content),
+                            `Contenido generado ${message.id}`
+                          )}
+                      >
+                        <div class="overflow-hidden rounded-[26px] border border-slate-200/80 bg-[linear-gradient(180deg,rgba(255,255,255,1)_0%,rgba(248,250,252,0.96)_100%)] p-2.5 shadow-[0_18px_34px_rgba(15,23,42,0.08)] transition duration-200 group-hover:border-sky-200 group-hover:shadow-[0_22px_42px_rgba(14,116,144,0.14)]">
+                          <div class="overflow-hidden rounded-[20px] bg-slate-100">
+                            <img
+                              src={buildAssetUrl(data.apiBaseUrl, message.content)}
+                              alt={`Contenido generado ${message.id}`}
+                              class="h-[18rem] w-full object-contain transition duration-300 group-hover:scale-[1.01]"
+                            />
+                          </div>
+                        </div>
+                      </button>
+                      <p class="mt-2 text-[11px] font-medium uppercase tracking-[0.18em] text-slate-400">
+                        Click en la imagen para verla ampliada
+                      </p>
                       <p class="mt-2 text-[12px] leading-5">
                         Version generada lista para revisar, iterar y asignar desde el panel de pantallas.
                       </p>
@@ -408,15 +472,25 @@
 
           <form method="POST" action="?/send" class="pointer-events-auto">
             <input type="hidden" name="conversationId" value={data.selectedConversationId || ''} />
+            <input type="hidden" name="baseImageUrl" value={data.latestGeneratedImage?.content || ''} />
             <div class="rounded-[24px] border border-white/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97)_0%,rgba(248,250,252,0.92)_100%)] p-2 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl transition focus-within:border-sky-300 focus-within:ring-4 focus-within:ring-sky-100">
               <textarea
                 id="prompt"
                 name="prompt"
                 rows="1"
-                placeholder="Escribe un prompt para generar una nueva pieza visual..."
+                placeholder={data.latestGeneratedImage
+                  ? 'Escribe como quieres ajustar la imagen actual...'
+                  : 'Escribe un prompt para generar una nueva pieza visual...'}
                 class="min-h-[2.85rem] w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-5 text-slate-900 outline-none"
               ></textarea>
-              <div class="flex items-center justify-end px-2 pb-1 pt-0">
+              <div class="flex items-center justify-between gap-3 px-2 pb-1 pt-0">
+                <p class="text-[11px] text-slate-500">
+                  {#if data.latestGeneratedImage}
+                    Este prompt iterara sobre la ultima imagen. Usa <span class="font-semibold text-slate-700">Nueva sesion</span> para empezar desde cero.
+                  {:else}
+                    El primer prompt de la sesion generara una imagen nueva.
+                  {/if}
+                </p>
                 <Button type="submit" size="sm" icon="send">Enviar prompt</Button>
               </div>
             </div>

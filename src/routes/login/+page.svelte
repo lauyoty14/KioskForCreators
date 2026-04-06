@@ -4,6 +4,16 @@
   import Icon from '$lib/components/ui/Icon.svelte';
 
   export let form: ActionData;
+
+  function isAuthMode(value: string | undefined): value is 'login' | 'register' {
+    return value === 'login' || value === 'register';
+  }
+
+  let mode: 'login' | 'register' = form?.mode === 'register' ? 'register' : 'login';
+
+  $: if (isAuthMode(form?.mode) && form.mode !== mode) {
+    mode = form.mode;
+  }
 </script>
 
 <svelte:head>
@@ -55,11 +65,76 @@
     </section>
 
     <section class="mx-auto w-full max-w-md">
-      <div class="rounded-[36px] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/60 backdrop-blur sm:p-10">
-        <div class="space-y-2 text-center sm:text-left">
-          <p class="text-[11px] font-bold uppercase tracking-[0.28em] text-primary">Iniciar sesion</p>
-          <h2 class="font-headline text-3xl font-extrabold tracking-tight text-slate-900">Bienvenido de nuevo</h2>
-          <p class="text-sm leading-7 text-slate-500">Entra a tu estudio creativo y continua generando piezas listas para publicar.</p>
+      <div class="relative overflow-hidden rounded-[36px] border border-slate-200 bg-white/90 p-8 shadow-xl shadow-slate-200/60 backdrop-blur sm:p-10">
+        <div class={`pointer-events-none absolute -right-10 top-0 h-40 w-40 rounded-full blur-3xl transition duration-500 ${
+          mode === 'register' ? 'bg-emerald-100/80' : 'bg-sky-100/80'
+        }`}></div>
+        <div class="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-slate-200/80 to-transparent"></div>
+
+        <div class="space-y-4">
+          <div class="relative min-h-[8.75rem] overflow-hidden">
+            <div
+              class={`absolute inset-0 space-y-2 text-center transition duration-400 ease-out sm:text-left ${
+                mode === 'login'
+                  ? 'translate-y-0 opacity-100'
+                  : 'pointer-events-none translate-y-2 opacity-0'
+              }`}
+            >
+              <p class="text-[11px] font-bold uppercase tracking-[0.28em] text-primary">Iniciar sesion</p>
+              <h2 class="font-headline text-3xl font-extrabold tracking-tight text-slate-900">
+                Bienvenido de nuevo
+              </h2>
+              <p class="text-sm leading-7 text-slate-500">
+                Entra a tu estudio creativo y continua generando piezas listas para publicar.
+              </p>
+            </div>
+
+            <div
+              class={`absolute inset-0 space-y-2 text-center transition duration-400 ease-out sm:text-left ${
+                mode === 'register'
+                  ? 'translate-y-0 opacity-100'
+                  : 'pointer-events-none translate-y-2 opacity-0'
+              }`}
+            >
+              <p class="text-[11px] font-bold uppercase tracking-[0.28em] text-primary">Crear cuenta</p>
+              <h2 class="font-headline text-3xl font-extrabold tracking-tight text-slate-900">
+                Activa tu estudio creativo
+              </h2>
+              <p class="text-sm leading-7 text-slate-500">
+                Crea tu acceso para empezar a generar, iterar y publicar contenido visual con IA.
+              </p>
+            </div>
+          </div>
+
+          <div class="relative grid grid-cols-2 gap-2 rounded-[22px] border border-slate-200 bg-slate-50/85 p-1.5">
+            <div
+              class="pointer-events-none absolute inset-y-1.5 left-1.5 w-[calc(50%-0.5rem)] rounded-[18px] bg-white shadow-[0_12px_26px_rgba(15,23,42,0.08)] transition duration-300 ease-out"
+              style={`transform: translateX(${mode === 'register' ? 'calc(100% + 0.5rem)' : '0'})`}
+            ></div>
+
+            <button
+              type="button"
+              class={`relative z-10 rounded-[18px] px-4 py-3 text-sm font-semibold transition ${
+                mode === 'login'
+                  ? 'text-slate-900'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              on:click={() => (mode = 'login')}
+            >
+              Entrar
+            </button>
+            <button
+              type="button"
+              class={`relative z-10 rounded-[18px] px-4 py-3 text-sm font-semibold transition ${
+                mode === 'register'
+                  ? 'text-slate-900'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+              on:click={() => (mode = 'register')}
+            >
+              Registrarse
+            </button>
+          </div>
         </div>
 
         {#if form?.error}
@@ -68,7 +143,7 @@
           </div>
         {/if}
 
-        <form method="POST" class="mt-8 space-y-6">
+        <form method="POST" action={mode === 'register' ? '?/register' : '?/login'} class="mt-8 space-y-6">
           <div class="space-y-2">
             <label class="block text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500" for="alias">
               Alias
@@ -81,7 +156,7 @@
                 type="text"
                 autocomplete="username"
                 value={form?.values?.alias ?? ''}
-                placeholder="marketing_norte"
+                placeholder="studio_norte"
                 class="w-full rounded-2xl border border-slate-200 bg-surface-container-high py-4 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
               />
             </div>
@@ -89,7 +164,7 @@
 
           <div class="space-y-2">
             <label class="block text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500" for="password">
-              Password
+              Contrasena
             </label>
             <div class="relative">
               <Icon name="lock" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -97,15 +172,44 @@
                 id="password"
                 name="password"
                 type="password"
-                autocomplete="current-password"
-                placeholder="Tu password"
+                autocomplete={mode === 'register' ? 'new-password' : 'current-password'}
+                placeholder={mode === 'register' ? 'Crea una contrasena' : 'Tu contrasena'}
                 class="w-full rounded-2xl border border-slate-200 bg-surface-container-high py-4 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100"
               />
             </div>
           </div>
 
+          <div
+            class={`grid overflow-hidden transition-all duration-400 ease-out ${
+              mode === 'register'
+                ? 'grid-rows-[1fr] opacity-100'
+                : 'grid-rows-[0fr] opacity-0'
+            }`}
+            aria-hidden={mode !== 'register'}
+          >
+            <div class="min-h-0">
+              <div class="space-y-2 pb-0.5">
+                <label class="block text-[11px] font-bold uppercase tracking-[0.24em] text-slate-500" for="confirmPassword">
+                  Confirmar contrasena
+                </label>
+                <div class="relative">
+                  <Icon name="verified_user" className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    autocomplete="new-password"
+                    placeholder="Repite tu contrasena"
+                    disabled={mode !== 'register'}
+                    class="w-full rounded-2xl border border-slate-200 bg-surface-container-high py-4 pl-12 pr-4 text-sm text-slate-900 outline-none transition focus:border-sky-300 focus:bg-white focus:ring-4 focus:ring-sky-100 disabled:pointer-events-none disabled:opacity-0"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
           <Button type="submit" size="lg" className="w-full justify-center">
-            Entrar al panel
+            {mode === 'register' ? 'Crear cuenta y entrar' : 'Entrar al panel'}
           </Button>
         </form>
       </div>

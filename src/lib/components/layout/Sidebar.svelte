@@ -64,7 +64,7 @@
       </div>
 
       <form method="POST" action="/logout">
-        <Button variant="ghost" size="sm" icon="logout" className="w-full justify-center">
+        <Button type="submit" variant="ghost" size="sm" icon="logout" className="w-full justify-center">
           Cerrar sesion
         </Button>
       </form>

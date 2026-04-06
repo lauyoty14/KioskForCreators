@@ -1,4 +1,5 @@
 import { normalizeConversation } from '$lib/normalizers';
+import { mergeConversationDrafts } from '$lib/server/conversation-drafts';
 import { apiBaseUrl, backendFetch, backendJson, readBackendError } from '$lib/server/backend';
 import type { Contenido, Conversacion, Pantalla } from '$lib/types';
 import { conversationPreview, isStaticAsset } from '$lib/utils';
@@ -50,7 +51,7 @@ function buildLibrary(conversations: Conversacion[]): CarouselLibraryItem[] {
     .slice(0, 6);
 }
 
-export const load: PageServerLoad = async ({ locals, url }) => {
+export const load: PageServerLoad = async ({ locals, url, cookies }) => {
   const [screens, rawConversations] = await Promise.all([
     backendJson<Pantalla[]>('/generators/mis-pantallas', {
       token: locals.token
@@ -60,9 +61,12 @@ export const load: PageServerLoad = async ({ locals, url }) => {
     }).catch(() => [])
   ]);
 
-  const conversations = rawConversations
-    .map(normalizeConversation)
-    .filter((conversation): conversation is Conversacion => Boolean(conversation));
+  const conversations = mergeConversationDrafts(
+    rawConversations
+      .map(normalizeConversation)
+      .filter((conversation): conversation is Conversacion => Boolean(conversation)),
+    cookies
+  );
 
   const library = buildLibrary(conversations);
 
