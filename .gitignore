@@ -1,7 +1,9 @@
 node_modules
 .svelte-kit
+.vercel
 dist
 .env
 .env.*
 !.env.example
+!.env.vercel.example
 npm-debug.log*
