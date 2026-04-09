@@ -1,4 +1,7 @@
 <script lang="ts">
+  import { enhance } from '$app/forms';
+  import { tick } from 'svelte';
+  import type { SubmitFunction } from '@sveltejs/kit';
   import Button from '$lib/components/ui/Button.svelte';
   import Icon from '$lib/components/ui/Icon.svelte';
   import { buildAssetUrl, conversationLabel, conversationPreview, isStaticAsset } from '$lib/utils';
@@ -7,9 +10,22 @@
   export let data: PageData;
   export let form: ActionData;
 
+  type ChatMessage = {
+    id: number | string;
+    role: 'user' | 'assistant';
+    content: string;
+    pending?: boolean;
+  };
+
   let activePanel: 'history' | 'screens' | null = null;
   let initializedPanel = false;
   let expandedImage: { src: string; alt: string } | null = null;
+  let promptDraft = '';
+  let pendingPrompt = '';
+  let isSendingPrompt = false;
+  let chatMessages: ChatMessage[] = [];
+  let hasVisibleConversation = false;
+  let chatViewport: HTMLDivElement | null = null;
 
   function firstPrompt(conversationId: number): string {
     const conversation = data.conversations.find((entry) => entry.id === conversationId);
@@ -46,6 +62,71 @@
       closeImagePreview();
     }
   }
+
+  async function scrollChatToBottom(): Promise<void> {
+    await tick();
+    chatViewport?.scrollTo({
+      top: chatViewport.scrollHeight,
+      behavior: 'smooth'
+    });
+  }
+
+  const enhanceSend: SubmitFunction = ({ formData }) => {
+    const prompt = String(formData.get('prompt') ?? '').trim();
+
+    if (!prompt || isSendingPrompt) {
+      return;
+    }
+
+    pendingPrompt = prompt;
+    isSendingPrompt = true;
+    promptDraft = '';
+    void scrollChatToBottom();
+
+    return async ({ result, update }) => {
+      if (result.type === 'failure' || result.type === 'error') {
+        promptDraft = pendingPrompt;
+      }
+
+      await update({ reset: false });
+
+      pendingPrompt = '';
+      isSendingPrompt = false;
+      void scrollChatToBottom();
+    };
+  };
+
+  function pendingAssistantCopy(): string {
+    return data.latestGeneratedImage
+      ? 'Ajustando la imagen actual con tu nuevo prompt.'
+      : 'Generando una nueva propuesta visual para esta sesion.';
+  }
+
+  $: chatMessages = [
+    ...((data.selectedConversation?.mensajes ?? []) as ChatMessage[]),
+    ...(pendingPrompt
+      ? [
+          {
+            id: `pending-user-${data.selectedConversationId || 'new'}`,
+            role: 'user' as const,
+            content: pendingPrompt,
+            pending: true
+          }
+        ]
+      : []),
+    ...(isSendingPrompt
+      ? [
+          {
+            id: `pending-assistant-${data.selectedConversationId || 'new'}`,
+            role: 'assistant' as const,
+            content: '',
+            pending: true
+          }
+        ]
+      : [])
+  ];
+
+  $: hasVisibleConversation = Boolean(data.selectedConversation) || chatMessages.length > 0;
 
   $: if (!initializedPanel && (form?.assignError || data.justAssigned)) {
     activePanel = 'screens';
@@ -394,12 +475,12 @@
         </div>
       </aside>
 
-      <div class="flex-1 overflow-y-auto overscroll-contain px-4 py-2 pb-36">
-        {#if data.selectedConversation}
+      <div bind:this={chatViewport} class="flex-1 overflow-y-auto overscroll-contain px-4 py-2 pb-36">
+        {#if hasVisibleConversation}
           <div class="mx-auto w-full max-w-[780px] space-y-3.5">
-            {#each data.selectedConversation.mensajes as message}
+            {#each chatMessages as message}
               <article class={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div class={`max-w-[90%] space-y-1.5 sm:max-w-[72%] ${message.role === 'user' ? 'items-end' : 'items-start'}`}>
+                <div class={`max-w-[90%] space-y-1.5 sm:max-w-[72%] ${message.role === 'user' ? 'items-end' : 'items-start'} ${message.pending ? 'opacity-95' : ''}`}>
                   <div class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
                     <Icon
                       name={message.role === 'user' ? 'person' : 'auto_awesome'}
@@ -442,6 +523,15 @@
                       <p class="mt-2 text-[12px] leading-5">
                         Version generada lista para revisar, iterar y asignar desde el panel de pantallas.
                       </p>
+                    {:else if message.pending && message.role === 'assistant'}
+                      <div class="flex items-center gap-2">
+                        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-500"></span>
+                        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-400 [animation-delay:160ms]"></span>
+                        <span class="h-2.5 w-2.5 animate-pulse rounded-full bg-sky-300 [animation-delay:320ms]"></span>
+                      </div>
+                      <p class="mt-2 text-[12px] leading-5 text-slate-600">
+                        {pendingAssistantCopy()}
+                      </p>
                     {:else}
                       <p class="text-[12px] leading-5">{message.content}</p>
                     {/if}
@@ -470,18 +560,20 @@
             </div>
           {/if}
 
-          <form method="POST" action="?/send" class="pointer-events-auto">
+          <form method="POST" action="?/send" use:enhance={enhanceSend} class="pointer-events-auto">
             <input type="hidden" name="conversationId" value={data.selectedConversationId || ''} />
             <input type="hidden" name="baseImageUrl" value={data.latestGeneratedImage?.content || ''} />
             <div class="rounded-[24px] border border-white/90 bg-[linear-gradient(180deg,rgba(255,255,255,0.97)_0%,rgba(248,250,252,0.92)_100%)] p-2 shadow-[0_24px_60px_rgba(15,23,42,0.16)] backdrop-blur-xl transition focus-within:border-sky-300 focus-within:ring-4 focus-within:ring-sky-100">
               <textarea
+                bind:value={promptDraft}
                 id="prompt"
                 name="prompt"
                 rows="1"
                 placeholder={data.latestGeneratedImage
                   ? 'Escribe como quieres ajustar la imagen actual...'
                   : 'Escribe un prompt para generar una nueva pieza visual...'}
-                class="min-h-[2.85rem] w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-5 text-slate-900 outline-none"
+                disabled={isSendingPrompt}
+                class="min-h-[2.85rem] w-full resize-none bg-transparent px-3 py-1.5 text-[13px] leading-5 text-slate-900 outline-none disabled:cursor-wait disabled:text-slate-400"
               ></textarea>
               <div class="flex items-center justify-between gap-3 px-2 pb-1 pt-0">
                 <p class="text-[11px] text-slate-500">
@@ -491,7 +583,9 @@
                     El primer prompt de la sesion generara una imagen nueva.
                   {/if}
                 </p>
-                <Button type="submit" size="sm" icon="send">Enviar prompt</Button>
+                <Button type="submit" size="sm" icon="send" disabled={isSendingPrompt}>
+                  {isSendingPrompt ? 'Generando...' : 'Enviar prompt'}
+                </Button>
               </div>
             </div>
           </form>

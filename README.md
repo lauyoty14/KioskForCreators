@@ -7,13 +7,13 @@ Frontend en SvelteKit para el backend FastAPI de `gestion_contenido`.
 Usa `.env` con:
 
 ```bash
-PUBLIC_API_BASE_URL=https://tu-backend-production.up.railway.app
+PUBLIC_API_BASE_URL=https://cooperative-surprise-production-64d7.up.railway.app
 ```
 
 Para Vercel:
 
 - usa la URL publica del backend desplegado en Railway
-- ejemplo: `https://tu-backend-production.up.railway.app`
+- ejemplo: `https://cooperative-surprise-production-64d7.up.railway.app`
 
 ## Scripts
 
@@ -35,3 +35,4 @@ El proyecto ya esta preparado con `@sveltejs/adapter-vercel`, asi que no hace fa
 
 Nota:
 en este entorno Windows el adapter puede fallar al final del build local por permisos de symlink en `.vercel/output`. Eso no afecta el build remoto de Vercel.
+

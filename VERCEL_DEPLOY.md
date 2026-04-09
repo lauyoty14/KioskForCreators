@@ -9,7 +9,7 @@
 Configura en Vercel:
 
 ```bash
-PUBLIC_API_BASE_URL=https://tu-backend-production.up.railway.app
+PUBLIC_API_BASE_URL=https://cooperative-surprise-production-64d7.up.railway.app
 ```
 
 La web y la app de pantallas deben apuntar a la misma URL publica de Railway para compartir contenido, vinculaciones y assets.
